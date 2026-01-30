@@ -64,6 +64,21 @@ protected:
 	/** Debug function to test damage */
 	void DebugTakeDamage();
 
+	/** Dash ability */
+	void Dash();
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dash")
+	float DashDistance = 1000.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dash")
+	float DashCooldown = 1.0f;
+
+	bool bCanDash = true;
+
+	FTimerHandle DashCooldownTimer;
+
+	void ResetDash();
+
 protected:
 
 	virtual void BeginPlay() override;

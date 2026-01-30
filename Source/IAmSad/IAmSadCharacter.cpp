@@ -11,6 +11,7 @@
 #include "EnhancedInputSubsystems.h"
 #include "InputActionValue.h"
 #include "HealthComponent.h"
+#include "TimerManager.h"
 
 DEFINE_LOG_CATEGORY(LogTemplateCharacter);
 
@@ -113,6 +114,9 @@ void AIAmSadCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 
 	// Debug damage input (H key)
 	PlayerInputComponent->BindKey(EKeys::H, IE_Pressed, this, &AIAmSadCharacter::DebugTakeDamage);
+
+	// Dash input (Shift key)
+	PlayerInputComponent->BindKey(EKeys::LeftShift, IE_Pressed, this, &AIAmSadCharacter::Dash);
 }
 
 void AIAmSadCharacter::Move(const FInputActionValue& Value)
@@ -160,4 +164,27 @@ void AIAmSadCharacter::DebugTakeDamage()
 		HealthComponent->TakeDamage(10.0f);
 		UE_LOG(LogTemplateCharacter, Log, TEXT("Debug damage: Health is now %.1f"), HealthComponent->CurrentHealth);
 	}
+}
+
+void AIAmSadCharacter::Dash()
+{
+	if (!bCanDash)
+	{
+		return;
+	}
+
+	// Get dash direction based on character facing direction
+	FVector DashDirection = GetActorForwardVector();
+
+	// Launch character in dash direction
+	LaunchCharacter(DashDirection * DashDistance, true, true);
+
+	// Start cooldown
+	bCanDash = false;
+	GetWorldTimerManager().SetTimer(DashCooldownTimer, this, &AIAmSadCharacter::ResetDash, DashCooldown, false);
+}
+
+void AIAmSadCharacter::ResetDash()
+{
+	bCanDash = true;
 }
