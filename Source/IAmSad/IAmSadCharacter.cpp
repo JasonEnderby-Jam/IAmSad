@@ -20,6 +20,9 @@ DEFINE_LOG_CATEGORY(LogTemplateCharacter);
 
 AIAmSadCharacter::AIAmSadCharacter()
 {
+	// Enable ticking
+	PrimaryActorTick.bCanEverTick = true;
+
 	// Set size for collision capsule
 	GetCapsuleComponent()->InitCapsuleSize(42.f, 96.0f);
 		
@@ -121,12 +124,28 @@ void AIAmSadCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 
 	// Dash input (Shift key)
 	PlayerInputComponent->BindKey(EKeys::LeftShift, IE_Pressed, this, &AIAmSadCharacter::Dash);
+
+	// Glide pitch controls (W/S keys)
+	PlayerInputComponent->BindKey(EKeys::W, IE_Pressed, this, &AIAmSadCharacter::GlidePitchUp);
+	PlayerInputComponent->BindKey(EKeys::W, IE_Released, this, &AIAmSadCharacter::GlidePitchStop);
+	PlayerInputComponent->BindKey(EKeys::S, IE_Pressed, this, &AIAmSadCharacter::GlidePitchDown);
+	PlayerInputComponent->BindKey(EKeys::S, IE_Released, this, &AIAmSadCharacter::GlidePitchStop);
 }
 
 void AIAmSadCharacter::Move(const FInputActionValue& Value)
 {
 	// input is a Vector2D
 	FVector2D MovementVector = Value.Get<FVector2D>();
+
+	// While gliding, A/D can change direction
+	if (bIsGliding)
+	{
+		if (FMath::Abs(MovementVector.X) > 0.5f)
+		{
+			GlideDirection = FMath::Sign(MovementVector.X);
+		}
+		return;
+	}
 
 	if (Controller != nullptr)
 	{
@@ -136,11 +155,11 @@ void AIAmSadCharacter::Move(const FInputActionValue& Value)
 
 		// get forward vector
 		const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
-	
-		// get right vector 
+
+		// get right vector
 		const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
 
-		// add movement 
+		// add movement
 		//AddMovementInput(ForwardDirection, MovementVector.Y);
 		AddMovementInput(RightDirection, MovementVector.X);
 	}
@@ -191,4 +210,167 @@ void AIAmSadCharacter::Dash()
 void AIAmSadCharacter::ResetDash()
 {
 	bCanDash = true;
+}
+
+void AIAmSadCharacter::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+
+	if (bIsGliding)
+	{
+		// Check if we hit the ground
+		if (GetCharacterMovement()->IsMovingOnGround())
+		{
+			StopGlide();
+			return;
+		}
+
+		UpdateGlide(DeltaTime);
+	}
+}
+
+void AIAmSadCharacter::UpdateGlide(float DeltaTime)
+{
+	// Check for stall - if speed too low, force nose down
+	bIsStalling = GlideSpeed < GlideStallSpeed;
+
+	if (bIsStalling)
+	{
+		// Stalling - force pitch down toward dive
+		GlidePitch = FMath::FInterpTo(GlidePitch, -80.0f, DeltaTime, 2.0f);
+	}
+	else
+	{
+		// Normal pitch control (W = pitch up, S = pitch down)
+		GlidePitch += GlidePitchInput * GlidePitchSpeed * DeltaTime;
+	}
+	GlidePitch = FMath::Clamp(GlidePitch, -85.0f, 85.0f);
+
+	// Convert pitch to radians for calculations
+	float PitchRad = FMath::DegreesToRadians(GlidePitch);
+
+	// Gravity effect on speed:
+	// - Diving (negative pitch) = gravity adds to speed
+	// - Climbing (positive pitch) = gravity reduces speed
+	float GravityEffect = -FMath::Sin(PitchRad) * GlideGravity * DeltaTime;
+	GlideSpeed += GravityEffect;
+
+	// Always lose a bit of energy (can't glide forever horizontally)
+	GlideSpeed -= GlideGravity * 0.1f * DeltaTime;
+
+	// Apply drag at high speeds
+	if (GlideSpeed > 500.0f)
+	{
+		GlideSpeed -= GlideSpeed * GlideDrag * DeltaTime;
+	}
+
+	// Clamp speed (allow going below stall, but not below minimum)
+	GlideSpeed = FMath::Clamp(GlideSpeed, 50.0f, GlideMaxSpeed);
+
+	// Calculate velocity from speed and pitch
+	FVector Velocity;
+	Velocity.X = 0.0f;
+	Velocity.Y = GlideDirection * FMath::Cos(PitchRad) * GlideSpeed;
+	Velocity.Z = FMath::Sin(PitchRad) * GlideSpeed;
+
+	// Apply velocity directly
+	GetCharacterMovement()->Velocity = Velocity;
+
+	// Rotate character to show glide direction (rolled 90 degrees to look like flying/lying down)
+	float YawAngle = (GlideDirection > 0) ? 90.0f : -90.0f;
+	float RollAngle = (GlideDirection > 0) ? -90.0f : 90.0f;
+	FRotator TargetRotation = FRotator(GlidePitch, YawAngle, RollAngle);
+	FRotator CurrentRotation = GetActorRotation();
+	FRotator NewRotation = FMath::RInterpTo(CurrentRotation, TargetRotation, DeltaTime, 8.0f);
+	SetActorRotation(NewRotation);
+}
+
+void AIAmSadCharacter::Jump()
+{
+	// If we've used all jumps and we're falling, start gliding
+	if (JumpCurrentCount >= JumpMaxCount && GetCharacterMovement()->IsFalling() && !bIsGliding)
+	{
+		StartGlide();
+	}
+	else
+	{
+		// Stop gliding if we somehow can jump again
+		if (bIsGliding)
+		{
+			StopGlide();
+		}
+		Super::Jump();
+	}
+}
+
+void AIAmSadCharacter::Landed(const FHitResult& Hit)
+{
+	Super::Landed(Hit);
+	StopGlide();
+}
+
+void AIAmSadCharacter::StartGlide()
+{
+	bIsGliding = true;
+	bIsStalling = false;
+
+	// Set direction based on current facing (use actor's current yaw)
+	FRotator CurrentRotation = GetActorRotation();
+	float CurrentYaw = CurrentRotation.Yaw;
+
+	// Determine glide direction from current facing
+	// Character facing +Y has yaw ~90, facing -Y has yaw ~-90
+	GlideDirection = (FMath::Abs(CurrentYaw) < 90.0f) ? 1.0f : -1.0f;
+	if (CurrentYaw > 0) GlideDirection = 1.0f;
+	else GlideDirection = -1.0f;
+
+	// Initialize glide with current momentum, start horizontal
+	FVector Velocity = GetCharacterMovement()->Velocity;
+	GlideSpeed = FMath::Max(Velocity.Size(), 400.0f);
+	GlidePitch = 0.0f;
+
+	// Disable movement component's rotation control
+	GetCharacterMovement()->bOrientRotationToMovement = false;
+
+	// Don't snap rotation - let UpdateGlide smoothly interpolate to glide pose
+
+	// Disable default gravity (we handle it ourselves)
+	GetCharacterMovement()->GravityScale = 0.0f;
+}
+
+void AIAmSadCharacter::StopGlide()
+{
+	if (bIsGliding)
+	{
+		bIsGliding = false;
+		bIsStalling = false;
+
+		// Restore normal gravity
+		GetCharacterMovement()->GravityScale = 1.0f;
+
+		// Re-enable movement component's rotation control
+		GetCharacterMovement()->bOrientRotationToMovement = true;
+
+		// Reset character rotation (keep yaw, reset pitch and roll)
+		FRotator CurrentRotation = GetActorRotation();
+		SetActorRotation(FRotator(0.0f, CurrentRotation.Yaw, 0.0f));
+
+		// Reset pitch input
+		GlidePitchInput = 0.0f;
+	}
+}
+
+void AIAmSadCharacter::GlidePitchUp()
+{
+	GlidePitchInput = 1.0f;
+}
+
+void AIAmSadCharacter::GlidePitchDown()
+{
+	GlidePitchInput = -1.0f;
+}
+
+void AIAmSadCharacter::GlidePitchStop()
+{
+	GlidePitchInput = 0.0f;
 }

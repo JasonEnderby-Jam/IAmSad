@@ -79,9 +79,46 @@ protected:
 
 	void ResetDash();
 
+	/** Glide ability - Elytra style */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Glide")
+	float GlideGravity = 800.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Glide")
+	float GlideDrag = 0.1f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Glide")
+	float GlideMaxSpeed = 4000.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Glide")
+	float GlidePitchSpeed = 100.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Glide")
+	float GlideStallSpeed = 200.0f;
+
+	bool bIsGliding = false;
+	bool bIsStalling = false;
+	float GlideDirection = 1.0f;
+	float GlidePitchInput = 0.0f;
+	float GlideSpeed = 0.0f;
+	float GlidePitch = 0.0f;
+
+	void GlidePitchUp();
+	void GlidePitchDown();
+	void GlidePitchStop();
+
+	void StartGlide();
+	void StopGlide();
+	void UpdateGlide(float DeltaTime);
+
 protected:
 
 	virtual void BeginPlay() override;
+
+	virtual void Tick(float DeltaTime) override;
+
+	virtual void Landed(const FHitResult& Hit) override;
+
+	virtual void Jump() override;
 
 	virtual void NotifyControllerChanged() override;
 
