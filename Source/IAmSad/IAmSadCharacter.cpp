@@ -44,6 +44,10 @@ AIAmSadCharacter::AIAmSadCharacter()
 	GetCharacterMovement()->BrakingDecelerationWalking = 2000.f;
 	GetCharacterMovement()->BrakingDecelerationFalling = 1500.0f;
 
+	// Constrain to 2.5D plane (lock X axis, move only on Y and Z)
+	GetCharacterMovement()->SetPlaneConstraintEnabled(true);
+	GetCharacterMovement()->SetPlaneConstraintNormal(FVector(1, 0, 0));
+
 	// Create a camera boom (no collision test - character uses outline when occluded instead)
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
 	CameraBoom->SetupAttachment(RootComponent);
