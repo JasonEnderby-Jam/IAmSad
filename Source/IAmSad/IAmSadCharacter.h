@@ -66,6 +66,8 @@ protected:
 
 protected:
 
+	virtual void BeginPlay() override;
+
 	virtual void NotifyControllerChanged() override;
 
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
