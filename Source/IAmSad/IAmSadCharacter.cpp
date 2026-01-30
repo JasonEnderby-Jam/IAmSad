@@ -10,6 +10,7 @@
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "InputActionValue.h"
+#include "HealthComponent.h"
 
 DEFINE_LOG_CATEGORY(LogTemplateCharacter);
 
@@ -50,8 +51,11 @@ AIAmSadCharacter::AIAmSadCharacter()
 	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName); // Attach the camera to the end of the boom and let the boom adjust to match the controller orientation
 	FollowCamera->bUsePawnControlRotation = false; // Camera does not rotate relative to arm
 
-	// Note: The skeletal mesh and anim blueprint references on the Mesh component (inherited from Character) 
+	// Note: The skeletal mesh and anim blueprint references on the Mesh component (inherited from Character)
 	// are set in the derived blueprint asset named ThirdPersonCharacter (to avoid direct content references in C++)
+
+	// Create Health Component
+	HealthComponent = CreateDefaultSubobject<UHealthComponent>(TEXT("HealthComponent"));
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -75,7 +79,7 @@ void AIAmSadCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 {
 	// Set up action bindings
 	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent)) {
-		
+
 		// Jumping
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &ACharacter::Jump);
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
@@ -90,6 +94,9 @@ void AIAmSadCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 	{
 		UE_LOG(LogTemplateCharacter, Error, TEXT("'%s' Failed to find an Enhanced Input component! This template is built to use the Enhanced Input system. If you intend to use the legacy system, then you will need to update this C++ file."), *GetNameSafe(this));
 	}
+
+	// Debug damage input (H key)
+	PlayerInputComponent->BindKey(EKeys::H, IE_Pressed, this, &AIAmSadCharacter::DebugTakeDamage);
 }
 
 void AIAmSadCharacter::Move(const FInputActionValue& Value)
@@ -128,4 +135,13 @@ void AIAmSadCharacter::Look(const FInputActionValue& Value)
 		AddControllerPitchInput(LookAxisVector.Y);
 	}
 	*/
+}
+
+void AIAmSadCharacter::DebugTakeDamage()
+{
+	if (HealthComponent)
+	{
+		HealthComponent->TakeDamage(10.0f);
+		UE_LOG(LogTemplateCharacter, Log, TEXT("Debug damage: Health is now %.1f"), HealthComponent->CurrentHealth);
+	}
 }

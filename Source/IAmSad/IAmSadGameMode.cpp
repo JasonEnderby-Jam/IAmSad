@@ -2,6 +2,7 @@
 
 #include "IAmSadGameMode.h"
 #include "IAmSadCharacter.h"
+#include "IAmSadHUD.h"
 #include "UObject/ConstructorHelpers.h"
 
 AIAmSadGameMode::AIAmSadGameMode()
@@ -12,4 +13,7 @@ AIAmSadGameMode::AIAmSadGameMode()
 	{
 		DefaultPawnClass = PlayerPawnBPClass.Class;
 	}
+
+	// set default HUD class
+	HUDClass = AIAmSadHUD::StaticClass();
 }
