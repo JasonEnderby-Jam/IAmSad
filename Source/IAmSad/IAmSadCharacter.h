@@ -122,6 +122,7 @@ protected:
 
 	bool bIsGliding = false;
 	bool bIsStalling = false;
+	float StallReflectionTarget = 0.0f;
 	float GlideDirection = 1.0f;
 	float GlidePitchInput = 0.0f;
 	float GlideSpeed = 0.0f;

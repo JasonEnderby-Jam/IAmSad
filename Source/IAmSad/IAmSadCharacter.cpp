@@ -244,14 +244,25 @@ void AIAmSadCharacter::Tick(float DeltaTime)
 
 void AIAmSadCharacter::UpdateGlide(float DeltaTime)
 {
-	// Check for stall - if speed too low, force nose down (but not if we're inverted/looping)
-	bool bIsInverted = FMath::Abs(GlidePitch) > 90.0f;
-	bIsStalling = GlideSpeed < GlideStallSpeed && !bIsInverted;
+	// Check for stall - if speed too low, force nose down
+	// Stay in stall until we're actually diving (pitch < -20)
+	bool bShouldStall = GlideSpeed < GlideStallSpeed;
+	if (bShouldStall && !bIsStalling)
+	{
+		// Entering stall - remember the pitch to reflect from
+		bIsStalling = true;
+		StallReflectionTarget = FMath::Min(-FMath::Abs(GlidePitch), -30.0f);
+	}
+	else if (bIsStalling && GlidePitch <= StallReflectionTarget + 5.0f)
+	{
+		// Reached reflection target, exit stall
+		bIsStalling = false;
+	}
 
 	if (bIsStalling)
 	{
-		// Stalling - force pitch down toward dive
-		GlidePitch = FMath::FInterpTo(GlidePitch, -80.0f, DeltaTime, 2.0f);
+		// Stalling - full reflection (90° up becomes 90° down)
+		GlidePitch = FMath::FInterpTo(GlidePitch, StallReflectionTarget, DeltaTime, 8.0f);
 	}
 	else
 	{
