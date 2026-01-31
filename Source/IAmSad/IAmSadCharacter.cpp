@@ -264,8 +264,12 @@ void AIAmSadCharacter::Tick(float DeltaTime)
 	{
 		if (bIsGliding)
 		{
-			// During gliding, sprite follows the actor's glide rotation
-			CharacterSprite->SetRelativeRotation(FRotator::ZeroRotator);
+			// During gliding, rotate sprite around world X axis (camera view) to stay 2D
+			float YawAngle = (GlideDirection > 0) ? 90.0f : -90.0f;
+			float SpriteGlidePitch = (GlideDirection > 0) ? GlidePitch : -GlidePitch;
+			FQuat YawQuat = FQuat(FVector::UpVector, FMath::DegreesToRadians(YawAngle));
+			FQuat PitchQuat = FQuat(FVector::ForwardVector, FMath::DegreesToRadians(SpriteGlidePitch));
+			CharacterSprite->SetWorldRotation((PitchQuat * YawQuat).Rotator());
 		}
 		else
 		{
@@ -478,12 +482,11 @@ void AIAmSadCharacter::UpdateGlide(float DeltaTime)
 	// Apply velocity directly
 	GetCharacterMovement()->Velocity = Velocity;
 
-	// Rotate character to show glide direction (rolled 90 degrees to look like flying/lying down)
-	// Use quaternion slerp to avoid gimbal lock issues during loops
-	// Use same roll for both directions so looping behavior is consistent
+	// Rotate character to show glide angle while keeping sprite 2D (facing camera)
+	// Yaw keeps sprite facing camera, Roll shows the glide pitch angle
 	float YawAngle = (GlideDirection > 0) ? 90.0f : -90.0f;
-	float RollAngle = 90.0f;
-	FQuat TargetQuat = FRotator(GlidePitch, YawAngle, RollAngle).Quaternion();
+	float RollAngle = (GlideDirection > 0) ? -GlidePitch : GlidePitch;
+	FQuat TargetQuat = FRotator(0.0f, YawAngle, RollAngle).Quaternion();
 	FQuat CurrentQuat = GetActorRotation().Quaternion();
 	FQuat NewQuat = FQuat::Slerp(CurrentQuat, TargetQuat, FMath::Clamp(DeltaTime * 8.0f, 0.0f, 1.0f));
 	SetActorRotation(NewQuat.Rotator());
@@ -584,18 +587,11 @@ void AIAmSadCharacter::StartGlide()
 	// Store original camera distance
 	OriginalCameraDistance = CameraBoom->TargetArmLength;
 
-	// Set direction based on current facing (use actor's current yaw)
-	FRotator CurrentRotation = GetActorRotation();
-	float CurrentYaw = CurrentRotation.Yaw;
-
-	// Determine glide direction from current facing
-	// Character facing +Y has yaw ~90, facing -Y has yaw ~-90
-	GlideDirection = (FMath::Abs(CurrentYaw) < 90.0f) ? 1.0f : -1.0f;
-	if (CurrentYaw > 0) GlideDirection = 1.0f;
-	else GlideDirection = -1.0f;
-
 	// Initialize glide with current momentum, start horizontal
 	FVector Velocity = GetCharacterMovement()->Velocity;
+
+	// Use sprite facing direction - it remembers which way you were last moving
+	GlideDirection = SpriteForward;
 	GlideSpeed = FMath::Max(Velocity.Size(), 400.0f);
 	GlidePitch = 0.0f;
 
