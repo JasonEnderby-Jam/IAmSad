@@ -12,6 +12,7 @@ class UCameraComponent;
 class UInputMappingContext;
 class UInputAction;
 class UHealthComponent;
+class UPaperFlipbookComponent;
 struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
@@ -28,6 +29,10 @@ class AIAmSadCharacter : public ACharacter
 	/** Follow camera */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera, meta = (AllowPrivateAccess = "true"))
 	UCameraComponent* FollowCamera;
+
+	/** Character sprite */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Sprite, meta = (AllowPrivateAccess = "true"))
+	UPaperFlipbookComponent* CharacterSprite;
 	
 	/** MappingContext */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
@@ -68,16 +73,27 @@ protected:
 	void Dash();
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dash")
-	float DashDistance = 1000.0f;
+	float DashSpeed = 2000.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dash")
 	float DashCooldown = 1.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dash")
+	float DashDuration = 0.15f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dash")
+	float DashImpulseStrength = 2000.0f;
+
 	bool bCanDash = true;
+	bool bIsDashing = false;
+	FVector DashDirection;
+	FVector DashVelocity;
 
 	FTimerHandle DashCooldownTimer;
+	FTimerHandle DashDurationTimer;
 
 	void ResetDash();
+	void EndDash();
 
 	/** Glide ability - Elytra style */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Glide")
@@ -155,6 +171,16 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Jump")
 	float JumpCutMultiplier = 0.05f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Jump")
+	float JumpBufferTime = 0.3f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Jump")
+	float MinFallTimeForGlide = 0.3f;
+
+	float JumpBufferTimer = 0.0f;
+	float FallTimer = 0.0f;
+	bool bHoldingJump = false;
 
 	virtual void NotifyControllerChanged() override;
 

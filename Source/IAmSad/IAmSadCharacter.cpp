@@ -13,6 +13,7 @@
 #include "HealthComponent.h"
 #include "TimerManager.h"
 #include "DrawDebugHelpers.h"
+#include "PaperFlipbookComponent.h"
 
 DEFINE_LOG_CATEGORY(LogTemplateCharacter);
 
@@ -40,16 +41,17 @@ AIAmSadCharacter::AIAmSadCharacter()
 	// instead of recompiling to adjust them
 	GetCharacterMovement()->JumpZVelocity = 900.f;
 	GetCharacterMovement()->AirControl = 1.0f;
-	GetCharacterMovement()->AirControlBoostMultiplier = 2.0f;
+	GetCharacterMovement()->AirControlBoostMultiplier = 4.0f;
 	GetCharacterMovement()->AirControlBoostVelocityThreshold = 0.0f;
-	GetCharacterMovement()->FallingLateralFriction = 0.0f;
+	GetCharacterMovement()->FallingLateralFriction = 8.0f;
 
 	// Single jump
 	JumpMaxCount = 1;
 	GetCharacterMovement()->MaxWalkSpeed = 800.f;
+	GetCharacterMovement()->MaxFlySpeed = 800.f;
 	GetCharacterMovement()->MinAnalogWalkSpeed = 20.f;
 	GetCharacterMovement()->BrakingDecelerationWalking = 2000.f;
-	GetCharacterMovement()->BrakingDecelerationFalling = 1500.0f;
+	GetCharacterMovement()->BrakingDecelerationFalling = 4000.0f;
 
 	// Constrain to 2.5D plane (lock X axis, move only on Y and Z)
 	GetCharacterMovement()->SetPlaneConstraintEnabled(true);
@@ -67,8 +69,13 @@ AIAmSadCharacter::AIAmSadCharacter()
 	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName); // Attach the camera to the end of the boom and let the boom adjust to match the controller orientation
 	FollowCamera->bUsePawnControlRotation = false; // Camera does not rotate relative to arm
 
-	// Note: The skeletal mesh and anim blueprint references on the Mesh component (inherited from Character)
-	// are set in the derived blueprint asset named ThirdPersonCharacter (to avoid direct content references in C++)
+	// Hide the skeletal mesh - we're using a sprite instead
+	GetMesh()->SetVisibility(false);
+
+	// Create character sprite (flipbook for animations)
+	CharacterSprite = CreateDefaultSubobject<UPaperFlipbookComponent>(TEXT("CharacterSprite"));
+	CharacterSprite->SetupAttachment(RootComponent);
+	CharacterSprite->SetRelativeLocation(FVector(0.0f, 0.0f, 0.0f));
 
 	// Create Health Component
 	HealthComponent = CreateDefaultSubobject<UHealthComponent>(TEXT("HealthComponent"));
@@ -109,8 +116,8 @@ void AIAmSadCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent)) {
 
 		// Jumping
-		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &ACharacter::Jump);
-		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
+		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &AIAmSadCharacter::Jump);
+		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &AIAmSadCharacter::StopJumping);
 
 		// Moving
 		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AIAmSadCharacter::Move);
@@ -194,14 +201,26 @@ void AIAmSadCharacter::Dash()
 	}
 
 	// Get dash direction based on character facing direction
-	FVector DashDirection = GetActorForwardVector();
+	DashDirection = GetActorForwardVector();
 
-	// Launch character in dash direction
-	LaunchCharacter(DashDirection * DashDistance, true, true);
+	// Set dash velocity
+	DashVelocity = DashDirection * DashSpeed;
+
+	// Start dashing
+	bIsDashing = true;
+	GetCharacterMovement()->Velocity = DashVelocity;
+
+	// Start dash duration timer
+	GetWorldTimerManager().SetTimer(DashDurationTimer, this, &AIAmSadCharacter::EndDash, DashDuration, false);
 
 	// Start cooldown
 	bCanDash = false;
 	GetWorldTimerManager().SetTimer(DashCooldownTimer, this, &AIAmSadCharacter::ResetDash, DashCooldown, false);
+}
+
+void AIAmSadCharacter::EndDash()
+{
+	bIsDashing = false;
 }
 
 void AIAmSadCharacter::ResetDash()
@@ -212,6 +231,66 @@ void AIAmSadCharacter::ResetDash()
 void AIAmSadCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+
+	// Keep sprite facing the camera and flip based on direction
+	if (CharacterSprite)
+	{
+		// Flip sprite based on velocity direction using rotation
+		float VelY = GetCharacterMovement()->Velocity.Y;
+		if (VelY > 10.0f)
+		{
+			// Moving right - face right
+			CharacterSprite->SetWorldRotation(FRotator(0.0f, 90.0f, 0.0f));
+		}
+		else if (VelY < -10.0f)
+		{
+			// Moving left - face left (flip by rotating 180 around Z)
+			CharacterSprite->SetWorldRotation(FRotator(0.0f, -90.0f, 0.0f));
+		}
+	}
+
+	// Track fall time for glide entry
+	if (GetCharacterMovement()->IsFalling())
+	{
+		FallTimer += DeltaTime;
+	}
+	else
+	{
+		FallTimer = 0.0f;
+	}
+
+	// Tick down jump buffer
+	if (JumpBufferTimer > 0.0f)
+	{
+		JumpBufferTimer -= DeltaTime;
+	}
+
+	// During dash, maintain constant velocity and knock away physics objects
+	if (bIsDashing)
+	{
+		// Force velocity to stay constant - we don't slow down for anything
+		GetCharacterMovement()->Velocity = DashVelocity;
+
+		// Check for actors we're hitting and apply impulse
+		TArray<FHitResult> Hits;
+		FVector Start = GetActorLocation();
+		FVector End = Start + DashDirection * 100.0f;
+		FCollisionShape Shape = FCollisionShape::MakeCapsule(GetCapsuleComponent()->GetScaledCapsuleRadius(), GetCapsuleComponent()->GetScaledCapsuleHalfHeight());
+		FCollisionQueryParams QueryParams;
+		QueryParams.AddIgnoredActor(this);
+
+		if (GetWorld()->SweepMultiByChannel(Hits, Start, End, FQuat::Identity, ECC_PhysicsBody, Shape, QueryParams))
+		{
+			for (const FHitResult& Hit : Hits)
+			{
+				if (Hit.GetActor() && Hit.GetComponent() && Hit.GetComponent()->IsSimulatingPhysics())
+				{
+					FVector Impulse = DashDirection * DashImpulseStrength;
+					Hit.GetComponent()->AddImpulseAtLocation(Impulse, Hit.ImpactPoint, NAME_None);
+				}
+			}
+		}
+	}
 
 	if (bIsGliding)
 	{
@@ -374,10 +453,21 @@ void AIAmSadCharacter::UpdateGlide(float DeltaTime)
 
 void AIAmSadCharacter::Jump()
 {
-	// If we've used all jumps and we're falling, start gliding
-	if (JumpCurrentCount >= JumpMaxCount && GetCharacterMovement()->IsFalling() && !bIsGliding)
+	bHoldingJump = true;
+
+	// If falling and trying to jump, buffer it for when we land
+	if (GetCharacterMovement()->IsFalling() && !bIsGliding)
 	{
-		StartGlide();
+		// Only enter glide if we've been falling long enough
+		if (JumpCurrentCount >= JumpMaxCount && FallTimer >= MinFallTimeForGlide)
+		{
+			StartGlide();
+		}
+		else
+		{
+			// Buffer the jump for when we land
+			JumpBufferTimer = JumpBufferTime;
+		}
 	}
 	else
 	{
@@ -393,6 +483,7 @@ void AIAmSadCharacter::Jump()
 void AIAmSadCharacter::StopJumping()
 {
 	Super::StopJumping();
+	bHoldingJump = false;
 
 	// Variable jump height - cut upward velocity when jump is released early
 	if (GetCharacterMovement()->Velocity.Z > 0)
@@ -407,6 +498,17 @@ void AIAmSadCharacter::Landed(const FHitResult& Hit)
 {
 	Super::Landed(Hit);
 	StopGlide();
+
+	// Check if space is being held
+	APlayerController* PC = Cast<APlayerController>(GetController());
+	bool bSpaceHeld = PC && PC->IsInputKeyDown(EKeys::SpaceBar);
+
+	// Execute jump if holding jump or buffered
+	if (bHoldingJump || bSpaceHeld || JumpBufferTimer > 0.0f)
+	{
+		JumpBufferTimer = 0.0f;
+		Super::Jump();
+	}
 }
 
 void AIAmSadCharacter::StartGlide()
