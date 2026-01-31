@@ -90,7 +90,16 @@ protected:
 	float GlideMaxSpeed = 6000.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Glide")
-	float GlidePitchSpeed = 100.0f;
+	float GlidePitchSpeed = 200.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Glide")
+	float GlidePitchSpeedMin = 0.8f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Glide")
+	float GlidePitchSpeedMax = 2.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Glide")
+	float GlidePitchSpeedReference = 800.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Glide")
 	float GlideStallSpeed = 200.0f;
@@ -98,12 +107,26 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Glide")
 	float GlideSinkRate = 100.0f;
 
+	// Camera zoom based on speed
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Glide")
+	float GlideCameraMinDistance = 400.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Glide")
+	float GlideCameraMaxDistance = 800.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Glide")
+	float GlideCameraSpeedMin = 400.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Glide")
+	float GlideCameraSpeedMax = 3000.0f;
+
 	bool bIsGliding = false;
 	bool bIsStalling = false;
 	float GlideDirection = 1.0f;
 	float GlidePitchInput = 0.0f;
 	float GlideSpeed = 0.0f;
 	float GlidePitch = 0.0f;
+	float OriginalCameraDistance = 0.0f;
 
 	void GlidePitchUp();
 	void GlidePitchDown();

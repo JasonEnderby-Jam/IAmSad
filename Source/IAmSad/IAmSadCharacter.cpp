@@ -124,12 +124,6 @@ void AIAmSadCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 
 	// Dash input (Shift key)
 	PlayerInputComponent->BindKey(EKeys::LeftShift, IE_Pressed, this, &AIAmSadCharacter::Dash);
-
-	// Glide pitch controls (W/S keys)
-	PlayerInputComponent->BindKey(EKeys::W, IE_Pressed, this, &AIAmSadCharacter::GlidePitchUp);
-	PlayerInputComponent->BindKey(EKeys::W, IE_Released, this, &AIAmSadCharacter::GlidePitchStop);
-	PlayerInputComponent->BindKey(EKeys::S, IE_Pressed, this, &AIAmSadCharacter::GlidePitchDown);
-	PlayerInputComponent->BindKey(EKeys::S, IE_Released, this, &AIAmSadCharacter::GlidePitchStop);
 }
 
 void AIAmSadCharacter::Move(const FInputActionValue& Value)
@@ -137,13 +131,11 @@ void AIAmSadCharacter::Move(const FInputActionValue& Value)
 	// input is a Vector2D
 	FVector2D MovementVector = Value.Get<FVector2D>();
 
-	// While gliding, A/D can change direction
+	// While gliding, A/D controls pitch (no direction change)
 	if (bIsGliding)
 	{
-		if (FMath::Abs(MovementVector.X) > 0.5f)
-		{
-			GlideDirection = FMath::Sign(MovementVector.X);
-		}
+		// A (negative X) = pitch up, D (positive X) = pitch down
+		GlidePitchInput = -MovementVector.X;
 		return;
 	}
 
@@ -236,6 +228,13 @@ void AIAmSadCharacter::Tick(float DeltaTime)
 		if (GetWorld()->LineTraceSingleByChannel(HitResult, Start, WallEnd, ECC_Visibility, QueryParams))
 		{
 			StopGlide();
+			// Kill upward momentum when hitting wall
+			FVector Velocity = GetCharacterMovement()->Velocity;
+			if (Velocity.Z > 0)
+			{
+				Velocity.Z = 0;
+				GetCharacterMovement()->Velocity = Velocity;
+			}
 			return;
 		}
 
@@ -245,8 +244,9 @@ void AIAmSadCharacter::Tick(float DeltaTime)
 
 void AIAmSadCharacter::UpdateGlide(float DeltaTime)
 {
-	// Check for stall - if speed too low, force nose down
-	bIsStalling = GlideSpeed < GlideStallSpeed;
+	// Check for stall - if speed too low, force nose down (but not if we're inverted/looping)
+	bool bIsInverted = FMath::Abs(GlidePitch) > 90.0f;
+	bIsStalling = GlideSpeed < GlideStallSpeed && !bIsInverted;
 
 	if (bIsStalling)
 	{
@@ -255,10 +255,15 @@ void AIAmSadCharacter::UpdateGlide(float DeltaTime)
 	}
 	else
 	{
-		// Normal pitch control (W = pitch up, S = pitch down)
-		GlidePitch += GlidePitchInput * GlidePitchSpeed * DeltaTime;
+		// Normal pitch control (A/D keys)
+		// Slower speed = tighter turns (faster pitch change)
+		float SpeedFactor = FMath::Clamp(GlidePitchSpeedReference / FMath::Max(GlideSpeed, 100.0f), GlidePitchSpeedMin, GlidePitchSpeedMax);
+		GlidePitch += GlidePitchInput * GlidePitchSpeed * SpeedFactor * DeltaTime;
 	}
-	GlidePitch = FMath::Clamp(GlidePitch, -85.0f, 85.0f);
+
+	// Wrap pitch to -180 to 180 range for loops
+	while (GlidePitch > 180.0f) GlidePitch -= 360.0f;
+	while (GlidePitch < -180.0f) GlidePitch += 360.0f;
 
 	// Convert pitch to radians for calculations
 	float PitchRad = FMath::DegreesToRadians(GlidePitch);
@@ -292,12 +297,21 @@ void AIAmSadCharacter::UpdateGlide(float DeltaTime)
 	GetCharacterMovement()->Velocity = Velocity;
 
 	// Rotate character to show glide direction (rolled 90 degrees to look like flying/lying down)
+	// Use quaternion slerp to avoid gimbal lock issues during loops
 	float YawAngle = (GlideDirection > 0) ? 90.0f : -90.0f;
 	float RollAngle = (GlideDirection > 0) ? -90.0f : 90.0f;
-	FRotator TargetRotation = FRotator(GlidePitch, YawAngle, RollAngle);
-	FRotator CurrentRotation = GetActorRotation();
-	FRotator NewRotation = FMath::RInterpTo(CurrentRotation, TargetRotation, DeltaTime, 8.0f);
-	SetActorRotation(NewRotation);
+	FQuat TargetQuat = FRotator(GlidePitch, YawAngle, RollAngle).Quaternion();
+	FQuat CurrentQuat = GetActorRotation().Quaternion();
+	FQuat NewQuat = FQuat::Slerp(CurrentQuat, TargetQuat, FMath::Clamp(DeltaTime * 8.0f, 0.0f, 1.0f));
+	SetActorRotation(NewQuat.Rotator());
+
+	// Camera zoom based on speed (with deadbands)
+	float SpeedAlpha = FMath::Clamp((GlideSpeed - GlideCameraSpeedMin) / (GlideCameraSpeedMax - GlideCameraSpeedMin), 0.0f, 1.0f);
+	float TargetCameraDistance = FMath::Lerp(GlideCameraMinDistance, GlideCameraMaxDistance, SpeedAlpha);
+	CameraBoom->TargetArmLength = FMath::FInterpTo(CameraBoom->TargetArmLength, TargetCameraDistance, DeltaTime, 3.0f);
+
+	// Reset pitch input after using it (will be set again by Move if keys are held)
+	GlidePitchInput = 0.0f;
 }
 
 void AIAmSadCharacter::Jump()
@@ -328,6 +342,9 @@ void AIAmSadCharacter::StartGlide()
 {
 	bIsGliding = true;
 	bIsStalling = false;
+
+	// Store original camera distance
+	OriginalCameraDistance = CameraBoom->TargetArmLength;
 
 	// Set direction based on current facing (use actor's current yaw)
 	FRotator CurrentRotation = GetActorRotation();
@@ -369,6 +386,9 @@ void AIAmSadCharacter::StopGlide()
 		// Reset character rotation (keep yaw, reset pitch and roll)
 		FRotator CurrentRotation = GetActorRotation();
 		SetActorRotation(FRotator(0.0f, CurrentRotation.Yaw, 0.0f));
+
+		// Restore camera distance
+		CameraBoom->TargetArmLength = OriginalCameraDistance;
 
 		// Reset pitch input
 		GlidePitchInput = 0.0f;
