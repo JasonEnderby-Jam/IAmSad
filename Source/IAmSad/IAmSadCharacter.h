@@ -13,6 +13,7 @@ class UInputMappingContext;
 class UInputAction;
 class UHealthComponent;
 class UPaperFlipbookComponent;
+class UPaperFlipbook;
 struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
@@ -33,7 +34,25 @@ class AIAmSadCharacter : public ACharacter
 	/** Character sprite */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Sprite, meta = (AllowPrivateAccess = "true"))
 	UPaperFlipbookComponent* CharacterSprite;
-	
+
+	/** Flipbook animations */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Flipbooks", meta = (AllowPrivateAccess = "true"))
+	UPaperFlipbook* IdleFlipbook;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Flipbooks", meta = (AllowPrivateAccess = "true"))
+	UPaperFlipbook* RunFlipbook;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Flipbooks", meta = (AllowPrivateAccess = "true"))
+	UPaperFlipbook* JumpFlipbook;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Flipbooks", meta = (AllowPrivateAccess = "true"))
+	UPaperFlipbook* GlideFlipbook;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Flipbooks", meta = (AllowPrivateAccess = "true"))
+	UPaperFlipbook* ReverseGravityFlipbook;
+
+	void UpdateFlipbook();
+
 	/** MappingContext */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
 	UInputMappingContext* DefaultMappingContext;

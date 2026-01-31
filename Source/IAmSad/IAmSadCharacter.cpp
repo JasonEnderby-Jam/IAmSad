@@ -14,6 +14,7 @@
 #include "TimerManager.h"
 #include "DrawDebugHelpers.h"
 #include "PaperFlipbookComponent.h"
+#include "PaperFlipbook.h"
 
 DEFINE_LOG_CATEGORY(LogTemplateCharacter);
 
@@ -258,6 +259,9 @@ void AIAmSadCharacter::ReverseGravity()
 void AIAmSadCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+
+	// Update flipbook based on current state
+	UpdateFlipbook();
 
 	// Keep sprite facing the camera and flip based on direction
 	if (CharacterSprite)
@@ -642,4 +646,37 @@ void AIAmSadCharacter::GlidePitchDown()
 void AIAmSadCharacter::GlidePitchStop()
 {
 	GlidePitchInput = 0.0f;
+}
+
+void AIAmSadCharacter::UpdateFlipbook()
+{
+	if (!CharacterSprite)
+	{
+		return;
+	}
+
+	UPaperFlipbook* DesiredFlipbook = IdleFlipbook;
+
+	if (bIsGliding)
+	{
+		DesiredFlipbook = GlideFlipbook;
+	}
+	else if (bGravityReversed)
+	{
+		DesiredFlipbook = ReverseGravityFlipbook;
+	}
+	else if (GetCharacterMovement()->IsFalling())
+	{
+		DesiredFlipbook = JumpFlipbook;
+	}
+	else if (FMath::Abs(GetCharacterMovement()->Velocity.Y) > 10.0f)
+	{
+		DesiredFlipbook = RunFlipbook;
+	}
+
+	// Only change if different to avoid resetting animation
+	if (DesiredFlipbook && CharacterSprite->GetFlipbook() != DesiredFlipbook)
+	{
+		CharacterSprite->SetFlipbook(DesiredFlipbook);
+	}
 }
