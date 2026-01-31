@@ -147,6 +147,10 @@ protected:
 	virtual void Landed(const FHitResult& Hit) override;
 
 	virtual void Jump() override;
+	virtual void StopJumping() override;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Jump")
+	float JumpCutMultiplier = 0.05f;
 
 	virtual void NotifyControllerChanged() override;
 

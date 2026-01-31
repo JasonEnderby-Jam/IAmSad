@@ -38,12 +38,15 @@ AIAmSadCharacter::AIAmSadCharacter()
 
 	// Note: For faster iteration times these variables, and many more, can be tweaked in the Character Blueprint
 	// instead of recompiling to adjust them
-	GetCharacterMovement()->JumpZVelocity = 700.f;
-	GetCharacterMovement()->AirControl = 0.35f;
+	GetCharacterMovement()->JumpZVelocity = 900.f;
+	GetCharacterMovement()->AirControl = 1.0f;
+	GetCharacterMovement()->AirControlBoostMultiplier = 2.0f;
+	GetCharacterMovement()->AirControlBoostVelocityThreshold = 0.0f;
+	GetCharacterMovement()->FallingLateralFriction = 0.0f;
 
-	// Enable double jump
+	// Single jump
 	JumpMaxCount = 1;
-	GetCharacterMovement()->MaxWalkSpeed = 500.f;
+	GetCharacterMovement()->MaxWalkSpeed = 800.f;
 	GetCharacterMovement()->MinAnalogWalkSpeed = 20.f;
 	GetCharacterMovement()->BrakingDecelerationWalking = 2000.f;
 	GetCharacterMovement()->BrakingDecelerationFalling = 1500.0f;
@@ -246,13 +249,11 @@ void AIAmSadCharacter::Tick(float DeltaTime)
 void AIAmSadCharacter::UpdateGlide(float DeltaTime)
 {
 	// Check for stall - if speed too low, force nose down
-	bIsStalling = GlideSpeed < GlideStallSpeed;
-
 	// Need speed above stall threshold AND be diving to exit stall
 	if (bIsStalling)
 	{
-		// Exit stall only when we have speed AND are diving
-		if (GlideSpeed >= GlideStallSpeed && GlidePitch * GlideDirection < -30.0f)
+		// Exit stall only when we have speed AND are diving (negative pitch = down)
+		if (GlideSpeed >= GlideStallSpeed && GlidePitch < -30.0f)
 		{
 			bIsStalling = false;
 		}
@@ -264,24 +265,17 @@ void AIAmSadCharacter::UpdateGlide(float DeltaTime)
 
 	if (bIsStalling)
 	{
-		// Stalling - no player control, nose drops FAST
-		// More aggressive when pitched up (more momentum to transfer)
-		float BasePitch = FMath::Abs(GlidePitch);
+		// Stalling - no player control, nose drops FAST toward -90 (straight down)
 		float StallRate = 400.0f;
 
-		// Extra fast when pitched up - feels like momentum snapping you down
-		if (BasePitch < 90.0f && BasePitch > 10.0f)
+		// Extra fast when not yet diving
+		if (GlidePitch > -30.0f)
 		{
-			StallRate += (BasePitch / 90.0f) * 400.0f;  // Up to 800 deg/sec when vertical
+			StallRate = 600.0f;
 		}
 
-		// Figure out which way is "down" based on current orientation
-		// When upright (-90 to 90): subtract pitch to dive
-		// When inverted (past 90 or before -90): add pitch to dive
-		bool bIsInverted = FMath::Abs(GlidePitch) > 90.0f;
-		float StallDirection = bIsInverted ? -GlideDirection : GlideDirection;
-
-		GlidePitch -= StallDirection * StallRate * DeltaTime;
+		// Always push toward diving (negative pitch)
+		GlidePitch = FMath::FInterpTo(GlidePitch, -90.0f, DeltaTime, StallRate / 30.0f);
 
 		// Fall faster during stall - reduce speed further
 		GlideSpeed = FMath::Max(GlideSpeed - 100.0f * DeltaTime, 50.0f);
@@ -300,7 +294,8 @@ void AIAmSadCharacter::UpdateGlide(float DeltaTime)
 		{
 			float LiftLossFactor = 1.0f - (GlideSpeed / LiftLossThreshold);
 			float NoseDropRate = LiftLossFactor * LiftLossFactor * 150.0f * DeltaTime;
-			GlidePitch -= GlideDirection * NoseDropRate;
+			// Always push toward negative pitch (diving down)
+			GlidePitch -= NoseDropRate;
 		}
 	}
 
@@ -377,6 +372,19 @@ void AIAmSadCharacter::Jump()
 			StopGlide();
 		}
 		Super::Jump();
+	}
+}
+
+void AIAmSadCharacter::StopJumping()
+{
+	Super::StopJumping();
+
+	// Variable jump height - cut upward velocity when jump is released early
+	if (GetCharacterMovement()->Velocity.Z > 0)
+	{
+		FVector Velocity = GetCharacterMovement()->Velocity;
+		Velocity.Z *= JumpCutMultiplier;
+		GetCharacterMovement()->Velocity = Velocity;
 	}
 }
 
