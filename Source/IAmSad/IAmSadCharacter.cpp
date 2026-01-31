@@ -39,7 +39,7 @@ AIAmSadCharacter::AIAmSadCharacter()
 
 	// Note: For faster iteration times these variables, and many more, can be tweaked in the Character Blueprint
 	// instead of recompiling to adjust them
-	GetCharacterMovement()->JumpZVelocity = 900.f;
+	GetCharacterMovement()->JumpZVelocity = 650.f;
 	GetCharacterMovement()->AirControl = 1.0f;
 	GetCharacterMovement()->AirControlBoostMultiplier = 4.0f;
 	GetCharacterMovement()->AirControlBoostVelocityThreshold = 0.0f;
@@ -47,11 +47,13 @@ AIAmSadCharacter::AIAmSadCharacter()
 
 	// Single jump
 	JumpMaxCount = 1;
-	GetCharacterMovement()->MaxWalkSpeed = 800.f;
-	GetCharacterMovement()->MaxFlySpeed = 800.f;
+	GetCharacterMovement()->MaxWalkSpeed = 700.f;
+	GetCharacterMovement()->MaxFlySpeed = 700.f;
 	GetCharacterMovement()->MinAnalogWalkSpeed = 20.f;
 	GetCharacterMovement()->BrakingDecelerationWalking = 2000.f;
 	GetCharacterMovement()->BrakingDecelerationFalling = 4000.0f;
+	GetCharacterMovement()->MaxAcceleration = 2500.f;
+	GetCharacterMovement()->GravityScale = 1.3f;
 
 	// Constrain to 2.5D plane (lock X axis, move only on Y and Z)
 	GetCharacterMovement()->SetPlaneConstraintEnabled(true);
@@ -240,13 +242,16 @@ void AIAmSadCharacter::Tick(float DeltaTime)
 		if (VelY > 10.0f)
 		{
 			// Moving right - face right
-			CharacterSprite->SetWorldRotation(FRotator(0.0f, 90.0f, 0.0f));
+			SpriteForward = 1.0f;
 		}
 		else if (VelY < -10.0f)
 		{
-			// Moving left - face left (flip by rotating 180 around Z)
-			CharacterSprite->SetWorldRotation(FRotator(0.0f, -90.0f, 0.0f));
+			// Moving left - face left
+			SpriteForward = -1.0f;
 		}
+		// Apply rotation (default right if never moved)
+		float YawAngle = (SpriteForward > 0) ? 90.0f : -90.0f;
+		CharacterSprite->SetWorldRotation(FRotator(0.0f, YawAngle, 0.0f));
 	}
 
 	// Track fall time for glide entry
@@ -461,7 +466,7 @@ void AIAmSadCharacter::Jump()
 		// Only enter glide if we've been falling long enough
 		if (JumpCurrentCount >= JumpMaxCount && FallTimer >= MinFallTimeForGlide)
 		{
-			StartGlide();
+			//StartGlide();
 		}
 		else
 		{

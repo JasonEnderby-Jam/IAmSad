@@ -181,6 +181,7 @@ protected:
 	float JumpBufferTimer = 0.0f;
 	float FallTimer = 0.0f;
 	bool bHoldingJump = false;
+	float SpriteForward = 1.0f;
 
 	virtual void NotifyControllerChanged() override;
 
