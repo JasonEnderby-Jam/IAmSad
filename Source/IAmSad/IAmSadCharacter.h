@@ -81,19 +81,22 @@ protected:
 
 	/** Glide ability - Elytra style */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Glide")
-	float GlideGravity = 800.0f;
+	float GlideGravity = 1500.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Glide")
-	float GlideDrag = 0.1f;
+	float GlideDrag = 0.08f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Glide")
-	float GlideMaxSpeed = 4000.0f;
+	float GlideMaxSpeed = 6000.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Glide")
 	float GlidePitchSpeed = 100.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Glide")
 	float GlideStallSpeed = 200.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Glide")
+	float GlideSinkRate = 100.0f;
 
 	bool bIsGliding = false;
 	bool bIsStalling = false;

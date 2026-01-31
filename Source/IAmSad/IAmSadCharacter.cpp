@@ -218,8 +218,22 @@ void AIAmSadCharacter::Tick(float DeltaTime)
 
 	if (bIsGliding)
 	{
+		FHitResult HitResult;
+		FVector Start = GetActorLocation();
+		FCollisionQueryParams QueryParams;
+		QueryParams.AddIgnoredActor(this);
+
 		// Check if we hit the ground
-		if (GetCharacterMovement()->IsMovingOnGround())
+		FVector GroundEnd = Start - FVector(0.0f, 0.0f, 50.0f);
+		if (GetWorld()->LineTraceSingleByChannel(HitResult, Start, GroundEnd, ECC_Visibility, QueryParams))
+		{
+			StopGlide();
+			return;
+		}
+
+		// Check if we hit a wall (trace in movement direction)
+		FVector WallEnd = Start + FVector(0.0f, GlideDirection * 50.0f, 0.0f);
+		if (GetWorld()->LineTraceSingleByChannel(HitResult, Start, WallEnd, ECC_Visibility, QueryParams))
 		{
 			StopGlide();
 			return;
@@ -268,10 +282,11 @@ void AIAmSadCharacter::UpdateGlide(float DeltaTime)
 	GlideSpeed = FMath::Clamp(GlideSpeed, 50.0f, GlideMaxSpeed);
 
 	// Calculate velocity from speed and pitch
+	// Always sink a bit even when flying level
 	FVector Velocity;
 	Velocity.X = 0.0f;
 	Velocity.Y = GlideDirection * FMath::Cos(PitchRad) * GlideSpeed;
-	Velocity.Z = FMath::Sin(PitchRad) * GlideSpeed;
+	Velocity.Z = FMath::Sin(PitchRad) * GlideSpeed - GlideSinkRate;
 
 	// Apply velocity directly
 	GetCharacterMovement()->Velocity = Velocity;
