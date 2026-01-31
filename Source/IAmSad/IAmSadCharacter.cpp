@@ -12,6 +12,7 @@
 #include "InputActionValue.h"
 #include "HealthComponent.h"
 #include "TimerManager.h"
+#include "DrawDebugHelpers.h"
 
 DEFINE_LOG_CATEGORY(LogTemplateCharacter);
 
@@ -41,7 +42,7 @@ AIAmSadCharacter::AIAmSadCharacter()
 	GetCharacterMovement()->AirControl = 0.35f;
 
 	// Enable double jump
-	JumpMaxCount = 2;
+	JumpMaxCount = 1;
 	GetCharacterMovement()->MaxWalkSpeed = 500.f;
 	GetCharacterMovement()->MinAnalogWalkSpeed = 20.f;
 	GetCharacterMovement()->BrakingDecelerationWalking = 2000.f;
@@ -245,24 +246,37 @@ void AIAmSadCharacter::Tick(float DeltaTime)
 void AIAmSadCharacter::UpdateGlide(float DeltaTime)
 {
 	// Check for stall - if speed too low, force nose down
-	// Stay in stall until we're actually diving (pitch < -20)
-	bool bShouldStall = GlideSpeed < GlideStallSpeed;
-	if (bShouldStall && !bIsStalling)
+	bIsStalling = GlideSpeed < GlideStallSpeed;
+
+	// Need speed above stall threshold AND be diving to exit stall
+	if (bIsStalling)
 	{
-		// Entering stall - remember the pitch to reflect from
-		bIsStalling = true;
-		StallReflectionTarget = FMath::Min(-FMath::Abs(GlidePitch), -30.0f);
+		// Exit stall only when we have speed AND are diving
+		if (GlideSpeed >= GlideStallSpeed && GlidePitch * GlideDirection < -30.0f)
+		{
+			bIsStalling = false;
+		}
 	}
-	else if (bIsStalling && GlidePitch <= StallReflectionTarget + 5.0f)
+	else if (GlideSpeed < GlideStallSpeed)
 	{
-		// Reached reflection target, exit stall
-		bIsStalling = false;
+		bIsStalling = true;
 	}
 
 	if (bIsStalling)
 	{
-		// Stalling - full reflection (90° up becomes 90° down)
-		GlidePitch = FMath::FInterpTo(GlidePitch, StallReflectionTarget, DeltaTime, 8.0f);
+		// Stalling - no player control, nose drops hard
+		float StallRate = 200.0f;
+
+		// Figure out which way is "down" based on current orientation
+		// When upright (-90 to 90): subtract pitch to dive
+		// When inverted (past 90 or before -90): add pitch to dive
+		bool bIsInverted = FMath::Abs(GlidePitch) > 90.0f;
+		float StallDirection = bIsInverted ? -GlideDirection : GlideDirection;
+
+		GlidePitch -= StallDirection * StallRate * DeltaTime;
+
+		// Fall faster during stall - reduce speed further
+		GlideSpeed = FMath::Max(GlideSpeed - 100.0f * DeltaTime, 50.0f);
 	}
 	else
 	{
@@ -278,7 +292,7 @@ void AIAmSadCharacter::UpdateGlide(float DeltaTime)
 		{
 			float LiftLossFactor = 1.0f - (GlideSpeed / LiftLossThreshold);
 			float NoseDropRate = LiftLossFactor * LiftLossFactor * 80.0f * DeltaTime;
-			GlidePitch -= NoseDropRate;
+			GlidePitch -= GlideDirection * NoseDropRate;
 		}
 	}
 
@@ -331,6 +345,11 @@ void AIAmSadCharacter::UpdateGlide(float DeltaTime)
 	float TargetCameraDistance = FMath::Lerp(GlideCameraMinDistance, GlideCameraMaxDistance, SpeedAlpha);
 	CameraBoom->TargetArmLength = FMath::FInterpTo(CameraBoom->TargetArmLength, TargetCameraDistance, DeltaTime, 3.0f);
 
+	// Draw trail line behind character
+	FVector CurrentPosition = GetActorLocation();
+	DrawDebugLine(GetWorld(), LastGlidePosition, CurrentPosition, FColor::Cyan, false, 2.0f, 0, 2.0f);
+	LastGlidePosition = CurrentPosition;
+
 	// Reset pitch input after using it (will be set again by Move if keys are held)
 	GlidePitchInput = 0.0f;
 }
@@ -363,6 +382,9 @@ void AIAmSadCharacter::StartGlide()
 {
 	bIsGliding = true;
 	bIsStalling = false;
+
+	// Store starting position for trail
+	LastGlidePosition = GetActorLocation();
 
 	// Store original camera distance
 	OriginalCameraDistance = CameraBoom->TargetArmLength;
