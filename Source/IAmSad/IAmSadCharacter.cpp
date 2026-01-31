@@ -256,20 +256,16 @@ void AIAmSadCharacter::ReverseGravity()
 	{
 		CharacterSprite->SetFlipbook(ReverseGravityFlipbook);
 		CharacterSprite->SetLooping(false);
+		CharacterSprite->SetPlayRate(1.0f);
+		CharacterSprite->PlayFromStart();
 
-		if (bGravityReversed)
+		// When going down, rotate 180 degrees to flip the animation visually
+		if (!bGravityReversed)
 		{
-			// Going up: play backwards from end
-			CharacterSprite->SetPlaybackPositionInFrames(CharacterSprite->GetFlipbookLengthInFrames() - 1, false);
-			CharacterSprite->SetPlayRate(-1.0f);
-			CharacterSprite->Play();
+			float YawAngle = (SpriteForward > 0) ? 90.0f : -90.0f;
+			CharacterSprite->SetWorldRotation(FRotator(0.0f, YawAngle, 180.0f));
 		}
-		else
-		{
-			// Going down: play forwards from start
-			CharacterSprite->SetPlayRate(1.0f);
-			CharacterSprite->PlayFromStart();
-		}
+
 		bPlayingGravityTransition = true;
 	}
 
@@ -320,9 +316,10 @@ void AIAmSadCharacter::Tick(float DeltaTime)
 	}
 
 	// Track fall time for glide entry (only count actual falling, not rising)
-	// Gliding disabled when gravity is reversed
+	// Gliding disabled when gravity is reversed or on ThirdPersonMap
 	float ZVel = GetCharacterMovement()->Velocity.Z;
-	bool bActuallyFalling = !bGravityReversed && GetCharacterMovement()->IsFalling() && ZVel < 0.0f;
+	bool bGlideDisabledOnMap = GetWorld()->GetMapName().Contains(TEXT("ThirdPersonMap"));
+	bool bActuallyFalling = !bGravityReversed && !bGlideDisabledOnMap && GetCharacterMovement()->IsFalling() && ZVel < 0.0f;
 
 	if (bActuallyFalling)
 	{
@@ -712,5 +709,6 @@ void AIAmSadCharacter::UpdateFlipbook()
 	if (DesiredFlipbook && CharacterSprite->GetFlipbook() != DesiredFlipbook)
 	{
 		CharacterSprite->SetFlipbook(DesiredFlipbook);
+		CharacterSprite->SetPlayRate(1.0f);
 	}
 }
