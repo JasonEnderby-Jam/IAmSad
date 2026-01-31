@@ -270,6 +270,16 @@ void AIAmSadCharacter::UpdateGlide(float DeltaTime)
 		// Slower speed = tighter turns (faster pitch change)
 		float SpeedFactor = FMath::Clamp(GlidePitchSpeedReference / FMath::Max(GlideSpeed, 100.0f), GlidePitchSpeedMin, GlidePitchSpeedMax);
 		GlidePitch += GlidePitchInput * GlidePitchSpeed * SpeedFactor * DeltaTime;
+
+		// Gradual lift loss - nose drops as speed decreases (losing lift)
+		// Stronger effect at lower speeds, no effect above 1500 speed
+		float LiftLossThreshold = 1500.0f;
+		if (GlideSpeed < LiftLossThreshold)
+		{
+			float LiftLossFactor = 1.0f - (GlideSpeed / LiftLossThreshold);
+			float NoseDropRate = LiftLossFactor * LiftLossFactor * 80.0f * DeltaTime;
+			GlidePitch -= NoseDropRate;
+		}
 	}
 
 	// Wrap pitch to -180 to 180 range for loops
