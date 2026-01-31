@@ -137,6 +137,9 @@ void AIAmSadCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 
 	// Dash input (Shift key)
 	PlayerInputComponent->BindKey(EKeys::LeftShift, IE_Pressed, this, &AIAmSadCharacter::Dash);
+
+	// Reverse gravity (R key)
+	PlayerInputComponent->BindKey(EKeys::R, IE_Pressed, this, &AIAmSadCharacter::ReverseGravity);
 }
 
 void AIAmSadCharacter::Move(const FInputActionValue& Value)
@@ -144,12 +147,11 @@ void AIAmSadCharacter::Move(const FInputActionValue& Value)
 	// input is a Vector2D
 	FVector2D MovementVector = Value.Get<FVector2D>();
 
-	// While gliding, A/D controls pitch relative to facing direction
+	// While gliding, W/S controls pitch
 	if (bIsGliding)
 	{
-		// Facing right: A = lift (pitch up), D = dive (pitch down)
-		// Facing left: D = lift (pitch up), A = dive (pitch down)
-		GlidePitchInput = -MovementVector.X * GlideDirection;
+		// W = pitch down (dive), S = pitch up (climb)
+		GlidePitchInput = -MovementVector.Y;
 		return;
 	}
 
@@ -230,6 +232,29 @@ void AIAmSadCharacter::ResetDash()
 	bCanDash = true;
 }
 
+void AIAmSadCharacter::ReverseGravity()
+{
+	// Don't allow gravity reversal while mid-air - that's cheesy as fuck
+	// Check vertical velocity instead of IsFalling() because floor detection
+	// doesn't work properly when standing on ceilings with reversed gravity
+	float ZSpeed = FMath::Abs(GetCharacterMovement()->Velocity.Z);
+	if (ZSpeed > 50.0f)
+	{
+		return;
+	}
+
+	bGravityReversed = !bGravityReversed;
+	float NewGravityScale = bGravityReversed ? -1.3f : 1.3f;
+	GetCharacterMovement()->GravityScale = NewGravityScale;
+
+	// Flip jump velocity direction so jumping works with reversed gravity
+	GetCharacterMovement()->JumpZVelocity = bGravityReversed ? -650.f : 650.f;
+
+	// Force into falling mode so the new gravity takes effect immediately
+	// (otherwise the character "sticks" to the ground like a spider)
+	GetCharacterMovement()->SetMovementMode(MOVE_Falling);
+}
+
 void AIAmSadCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
@@ -237,27 +262,47 @@ void AIAmSadCharacter::Tick(float DeltaTime)
 	// Keep sprite facing the camera and flip based on direction
 	if (CharacterSprite)
 	{
-		// Flip sprite based on velocity direction using rotation
-		float VelY = GetCharacterMovement()->Velocity.Y;
-		if (VelY > 10.0f)
+		if (bIsGliding)
 		{
-			// Moving right - face right
-			SpriteForward = 1.0f;
+			// During gliding, sprite follows the actor's glide rotation
+			CharacterSprite->SetRelativeRotation(FRotator::ZeroRotator);
 		}
-		else if (VelY < -10.0f)
+		else
 		{
-			// Moving left - face left
-			SpriteForward = -1.0f;
+			// Flip sprite based on velocity direction using rotation
+			float VelY = GetCharacterMovement()->Velocity.Y;
+			if (VelY > 10.0f)
+			{
+				// Moving right - face right
+				SpriteForward = 1.0f;
+			}
+			else if (VelY < -10.0f)
+			{
+				// Moving left - face left
+				SpriteForward = -1.0f;
+			}
+			// Apply rotation (default right if never moved)
+			// Flip upside down if gravity is reversed
+			float YawAngle = (SpriteForward > 0) ? 90.0f : -90.0f;
+			float RollAngle = bGravityReversed ? 180.0f : 0.0f;
+			CharacterSprite->SetWorldRotation(FRotator(0.0f, YawAngle, RollAngle));
 		}
-		// Apply rotation (default right if never moved)
-		float YawAngle = (SpriteForward > 0) ? 90.0f : -90.0f;
-		CharacterSprite->SetWorldRotation(FRotator(0.0f, YawAngle, 0.0f));
 	}
 
-	// Track fall time for glide entry
-	if (GetCharacterMovement()->IsFalling())
+	// Track fall time for glide entry (only count actual falling, not rising)
+	// Gliding disabled when gravity is reversed
+	float ZVel = GetCharacterMovement()->Velocity.Z;
+	bool bActuallyFalling = !bGravityReversed && GetCharacterMovement()->IsFalling() && ZVel < 0.0f;
+
+	if (bActuallyFalling)
 	{
 		FallTimer += DeltaTime;
+
+		// Auto-start glide after falling long enough
+		if (!bIsGliding && FallTimer >= MinFallTimeForGlide)
+		{
+			StartGlide();
+		}
 	}
 	else
 	{
@@ -435,8 +480,9 @@ void AIAmSadCharacter::UpdateGlide(float DeltaTime)
 
 	// Rotate character to show glide direction (rolled 90 degrees to look like flying/lying down)
 	// Use quaternion slerp to avoid gimbal lock issues during loops
+	// Use same roll for both directions so looping behavior is consistent
 	float YawAngle = (GlideDirection > 0) ? 90.0f : -90.0f;
-	float RollAngle = (GlideDirection > 0) ? -90.0f : 90.0f;
+	float RollAngle = 90.0f;
 	FQuat TargetQuat = FRotator(GlidePitch, YawAngle, RollAngle).Quaternion();
 	FQuat CurrentQuat = GetActorRotation().Quaternion();
 	FQuat NewQuat = FQuat::Slerp(CurrentQuat, TargetQuat, FMath::Clamp(DeltaTime * 8.0f, 0.0f, 1.0f));
@@ -447,9 +493,11 @@ void AIAmSadCharacter::UpdateGlide(float DeltaTime)
 	float TargetCameraDistance = FMath::Lerp(GlideCameraMinDistance, GlideCameraMaxDistance, SpeedAlpha);
 	CameraBoom->TargetArmLength = FMath::FInterpTo(CameraBoom->TargetArmLength, TargetCameraDistance, DeltaTime, 3.0f);
 
-	// Draw trail line behind character
+	// Draw rainbow trail line behind character
 	FVector CurrentPosition = GetActorLocation();
-	DrawDebugLine(GetWorld(), LastGlidePosition, CurrentPosition, FColor::Cyan, false, 2.0f, 0, 2.0f);
+	RainbowHue = FMath::Fmod(RainbowHue + DeltaTime * 200.0f, 360.0f);
+	FLinearColor RainbowColor = FLinearColor::MakeFromHSV8(static_cast<uint8>(RainbowHue / 360.0f * 255.0f), 255, 255);
+	DrawDebugLine(GetWorld(), LastGlidePosition, CurrentPosition, RainbowColor.ToFColor(true), false, 2.0f, 0, 2.0f);
 	LastGlidePosition = CurrentPosition;
 
 	// Reset pitch input after using it (will be set again by Move if keys are held)
@@ -460,19 +508,28 @@ void AIAmSadCharacter::Jump()
 {
 	bHoldingJump = true;
 
+	// Handle reversed gravity jump manually - floor detection doesn't work on ceilings
+	if (bGravityReversed)
+	{
+		// Check if we're "grounded" on the ceiling (low vertical velocity)
+		float ZSpeed = FMath::Abs(GetCharacterMovement()->Velocity.Z);
+		if (ZSpeed < 50.0f)
+		{
+			// Apply jump velocity directly (already negative when gravity reversed)
+			FVector Velocity = GetCharacterMovement()->Velocity;
+			Velocity.Z = GetCharacterMovement()->JumpZVelocity;
+			GetCharacterMovement()->Velocity = Velocity;
+			GetCharacterMovement()->SetMovementMode(MOVE_Falling);
+		}
+		return;
+	}
+
+	// Normal gravity jump logic
 	// If falling and trying to jump, buffer it for when we land
 	if (GetCharacterMovement()->IsFalling() && !bIsGliding)
 	{
-		// Only enter glide if we've been falling long enough
-		if (JumpCurrentCount >= JumpMaxCount && FallTimer >= MinFallTimeForGlide)
-		{
-			//StartGlide();
-		}
-		else
-		{
-			// Buffer the jump for when we land
-			JumpBufferTimer = JumpBufferTime;
-		}
+		// Buffer the jump for when we land
+		JumpBufferTimer = JumpBufferTime;
 	}
 	else
 	{

@@ -149,6 +149,7 @@ protected:
 	float GlideSpeed = 0.0f;
 	float GlidePitch = 0.0f;
 	float OriginalCameraDistance = 0.0f;
+	float RainbowHue = 0.0f;
 
 	void GlidePitchUp();
 	void GlidePitchDown();
@@ -176,12 +177,15 @@ protected:
 	float JumpBufferTime = 0.3f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Jump")
-	float MinFallTimeForGlide = 0.3f;
+	float MinFallTimeForGlide = 0.2f;
 
 	float JumpBufferTimer = 0.0f;
 	float FallTimer = 0.0f;
 	bool bHoldingJump = false;
 	float SpriteForward = 1.0f;
+	bool bGravityReversed = false;
+
+	void ReverseGravity();
 
 	virtual void NotifyControllerChanged() override;
 
