@@ -251,6 +251,28 @@ void AIAmSadCharacter::ReverseGravity()
 	// Flip jump velocity direction so jumping works with reversed gravity
 	GetCharacterMovement()->JumpZVelocity = bGravityReversed ? -650.f : 650.f;
 
+	// Play reverse gravity transition animation
+	if (CharacterSprite && ReverseGravityFlipbook)
+	{
+		CharacterSprite->SetFlipbook(ReverseGravityFlipbook);
+		CharacterSprite->SetLooping(false);
+
+		if (bGravityReversed)
+		{
+			// Going up: play backwards from end
+			CharacterSprite->SetPlaybackPositionInFrames(CharacterSprite->GetFlipbookLengthInFrames() - 1, false);
+			CharacterSprite->SetPlayRate(-1.0f);
+			CharacterSprite->Play();
+		}
+		else
+		{
+			// Going down: play forwards from start
+			CharacterSprite->SetPlayRate(1.0f);
+			CharacterSprite->PlayFromStart();
+		}
+		bPlayingGravityTransition = true;
+	}
+
 	// Force into falling mode so the new gravity takes effect immediately
 	// (otherwise the character "sticks" to the ground like a spider)
 	GetCharacterMovement()->SetMovementMode(MOVE_Falling);
@@ -655,15 +677,27 @@ void AIAmSadCharacter::UpdateFlipbook()
 		return;
 	}
 
+	// If gravity transition is playing, wait for it to finish
+	if (bPlayingGravityTransition)
+	{
+		if (!CharacterSprite->IsPlaying())
+		{
+			// Transition finished
+			bPlayingGravityTransition = false;
+			CharacterSprite->SetLooping(true);
+		}
+		else
+		{
+			// Still playing, don't override
+			return;
+		}
+	}
+
 	UPaperFlipbook* DesiredFlipbook = IdleFlipbook;
 
 	if (bIsGliding)
 	{
 		DesiredFlipbook = GlideFlipbook;
-	}
-	else if (bGravityReversed)
-	{
-		DesiredFlipbook = ReverseGravityFlipbook;
 	}
 	else if (GetCharacterMovement()->IsFalling())
 	{

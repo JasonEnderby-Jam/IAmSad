@@ -203,6 +203,7 @@ protected:
 	bool bHoldingJump = false;
 	float SpriteForward = 1.0f;
 	bool bGravityReversed = false;
+	bool bPlayingGravityTransition = false;
 
 	void ReverseGravity();
 
