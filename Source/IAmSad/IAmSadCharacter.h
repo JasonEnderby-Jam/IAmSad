@@ -102,7 +102,7 @@ protected:
 	float GlidePitchSpeedReference = 800.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Glide")
-	float GlideStallSpeed = 200.0f;
+	float GlideStallSpeed = 400.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Glide")
 	float GlideSinkRate = 100.0f;

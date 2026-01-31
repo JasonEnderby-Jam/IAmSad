@@ -264,8 +264,16 @@ void AIAmSadCharacter::UpdateGlide(float DeltaTime)
 
 	if (bIsStalling)
 	{
-		// Stalling - no player control, nose drops hard
-		float StallRate = 200.0f;
+		// Stalling - no player control, nose drops FAST
+		// More aggressive when pitched up (more momentum to transfer)
+		float BasePitch = FMath::Abs(GlidePitch);
+		float StallRate = 400.0f;
+
+		// Extra fast when pitched up - feels like momentum snapping you down
+		if (BasePitch < 90.0f && BasePitch > 10.0f)
+		{
+			StallRate += (BasePitch / 90.0f) * 400.0f;  // Up to 800 deg/sec when vertical
+		}
 
 		// Figure out which way is "down" based on current orientation
 		// When upright (-90 to 90): subtract pitch to dive
@@ -286,12 +294,12 @@ void AIAmSadCharacter::UpdateGlide(float DeltaTime)
 		GlidePitch += GlidePitchInput * GlidePitchSpeed * SpeedFactor * DeltaTime;
 
 		// Gradual lift loss - nose drops as speed decreases (losing lift)
-		// Stronger effect at lower speeds, no effect above 1500 speed
-		float LiftLossThreshold = 1500.0f;
+		// Stronger effect at lower speeds, no effect above 2000 speed
+		float LiftLossThreshold = 2000.0f;
 		if (GlideSpeed < LiftLossThreshold)
 		{
 			float LiftLossFactor = 1.0f - (GlideSpeed / LiftLossThreshold);
-			float NoseDropRate = LiftLossFactor * LiftLossFactor * 80.0f * DeltaTime;
+			float NoseDropRate = LiftLossFactor * LiftLossFactor * 150.0f * DeltaTime;
 			GlidePitch -= GlideDirection * NoseDropRate;
 		}
 	}
