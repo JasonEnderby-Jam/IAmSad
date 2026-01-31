@@ -135,11 +135,12 @@ void AIAmSadCharacter::Move(const FInputActionValue& Value)
 	// input is a Vector2D
 	FVector2D MovementVector = Value.Get<FVector2D>();
 
-	// While gliding, A/D controls pitch (no direction change)
+	// While gliding, A/D controls pitch relative to facing direction
 	if (bIsGliding)
 	{
-		// A (negative X) = pitch up, D (positive X) = pitch down
-		GlidePitchInput = -MovementVector.X;
+		// Facing right: A = lift (pitch up), D = dive (pitch down)
+		// Facing left: D = lift (pitch up), A = dive (pitch down)
+		GlidePitchInput = -MovementVector.X * GlideDirection;
 		return;
 	}
 
@@ -249,11 +250,13 @@ void AIAmSadCharacter::Tick(float DeltaTime)
 void AIAmSadCharacter::UpdateGlide(float DeltaTime)
 {
 	// Check for stall - if speed too low, force nose down
-	// Need speed above stall threshold AND be diving to exit stall
+	// Need speed above stall threshold AND be diving AND wait for recovery timer
 	if (bIsStalling)
 	{
-		// Exit stall only when we have speed AND are diving (negative pitch = down)
-		if (GlideSpeed >= GlideStallSpeed && GlidePitch < -30.0f)
+		StallRecoveryTimer -= DeltaTime;
+
+		// Exit stall only when: recovery timer done AND have speed AND are diving
+		if (StallRecoveryTimer <= 0.0f && GlideSpeed >= GlideStallSpeed && GlidePitch < -30.0f)
 		{
 			bIsStalling = false;
 		}
@@ -261,6 +264,7 @@ void AIAmSadCharacter::UpdateGlide(float DeltaTime)
 	else if (GlideSpeed < GlideStallSpeed)
 	{
 		bIsStalling = true;
+		StallRecoveryTimer = StallRecoveryDelay;
 	}
 
 	if (bIsStalling)
@@ -268,8 +272,12 @@ void AIAmSadCharacter::UpdateGlide(float DeltaTime)
 		// Stalling - no player control, nose drops FAST toward -90 (straight down)
 		float StallRate = 400.0f;
 
-		// Extra fast when not yet diving
-		if (GlidePitch > -30.0f)
+		// Extra aggressive when horizontal (near pitch 0) - snap down hard
+		if (FMath::Abs(GlidePitch) < 30.0f)
+		{
+			StallRate = 1000.0f;
+		}
+		else if (GlidePitch > -30.0f)
 		{
 			StallRate = 600.0f;
 		}
@@ -288,8 +296,8 @@ void AIAmSadCharacter::UpdateGlide(float DeltaTime)
 		GlidePitch += GlidePitchInput * GlidePitchSpeed * SpeedFactor * DeltaTime;
 
 		// Gradual lift loss - nose drops as speed decreases (losing lift)
-		// Stronger effect at lower speeds, no effect above 2000 speed
-		float LiftLossThreshold = 2000.0f;
+		// Stronger effect at lower speeds, no effect above 3500 speed
+		float LiftLossThreshold = 3500.0f;
 		if (GlideSpeed < LiftLossThreshold)
 		{
 			float LiftLossFactor = 1.0f - (GlideSpeed / LiftLossThreshold);
@@ -326,9 +334,16 @@ void AIAmSadCharacter::UpdateGlide(float DeltaTime)
 
 	// Calculate velocity from speed and pitch
 	// Always sink a bit even when flying level
+	// Preserve some horizontal momentum when diving (but not when inverted/looping)
+	bool bIsInverted = FMath::Abs(GlidePitch) > 90.0f;
+	float HorizontalFactor = FMath::Cos(PitchRad);
+	if (!bIsInverted && HorizontalFactor >= 0.0f)
+	{
+		HorizontalFactor = FMath::Max(HorizontalFactor, 0.3f);
+	}
 	FVector Velocity;
 	Velocity.X = 0.0f;
-	Velocity.Y = GlideDirection * FMath::Cos(PitchRad) * GlideSpeed;
+	Velocity.Y = GlideDirection * HorizontalFactor * GlideSpeed;
 	Velocity.Z = FMath::Sin(PitchRad) * GlideSpeed - GlideSinkRate;
 
 	// Apply velocity directly

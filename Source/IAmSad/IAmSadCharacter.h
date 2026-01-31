@@ -123,6 +123,10 @@ protected:
 	bool bIsGliding = false;
 	bool bIsStalling = false;
 	float StallReflectionTarget = 0.0f;
+	float StallRecoveryTimer = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Glide")
+	float StallRecoveryDelay = 0.5f;
 	FVector LastGlidePosition;
 	float GlideDirection = 1.0f;
 	float GlidePitchInput = 0.0f;
