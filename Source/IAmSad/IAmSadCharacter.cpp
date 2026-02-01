@@ -15,6 +15,9 @@
 #include "DrawDebugHelpers.h"
 #include "PaperFlipbookComponent.h"
 #include "PaperFlipbook.h"
+#include "Sound/SoundBase.h"
+#include "Components/AudioComponent.h"
+#include "Kismet/GameplayStatics.h"
 
 DEFINE_LOG_CATEGORY(LogTemplateCharacter);
 
@@ -251,6 +254,13 @@ void AIAmSadCharacter::ReverseGravity()
 	// Flip jump velocity direction so jumping works with reversed gravity
 	GetCharacterMovement()->JumpZVelocity = bGravityReversed ? -650.f : 650.f;
 
+	// Play sound and call Blueprint hook
+	if (ReverseGravitySound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, ReverseGravitySound, GetActorLocation());
+	}
+	OnReverseGravity(bGravityReversed);
+
 	// Play reverse gravity transition animation
 	if (CharacterSprite && ReverseGravityFlipbook)
 	{
@@ -320,6 +330,16 @@ void AIAmSadCharacter::Tick(float DeltaTime)
 	float ZVel = GetCharacterMovement()->Velocity.Z;
 	bool bGlideDisabledOnMap = GetWorld()->GetMapName().Contains(TEXT("ThirdPersonMap"));
 	bool bActuallyFalling = !bGravityReversed && !bGlideDisabledOnMap && GetCharacterMovement()->IsFalling() && ZVel < 0.0f;
+
+	// Track fall speed for fall damage calculation
+	if (GetCharacterMovement()->IsFalling())
+	{
+		float CurrentFallSpeed = FMath::Abs(ZVel);
+		if (CurrentFallSpeed > LastFallSpeed)
+		{
+			LastFallSpeed = CurrentFallSpeed;
+		}
+	}
 
 	if (bActuallyFalling)
 	{
@@ -546,6 +566,13 @@ void AIAmSadCharacter::Jump()
 			Velocity.Z = GetCharacterMovement()->JumpZVelocity;
 			GetCharacterMovement()->Velocity = Velocity;
 			GetCharacterMovement()->SetMovementMode(MOVE_Falling);
+
+			// Play sound and call Blueprint hook
+			if (JumpSound)
+			{
+				UGameplayStatics::PlaySoundAtLocation(this, JumpSound, GetActorLocation());
+			}
+			OnJump();
 		}
 		return;
 	}
@@ -565,6 +592,13 @@ void AIAmSadCharacter::Jump()
 			StopGlide();
 		}
 		Super::Jump();
+
+		// Play sound and call Blueprint hook
+		if (JumpSound)
+		{
+			UGameplayStatics::PlaySoundAtLocation(this, JumpSound, GetActorLocation());
+		}
+		OnJump();
 	}
 }
 
@@ -587,6 +621,10 @@ void AIAmSadCharacter::Landed(const FHitResult& Hit)
 	Super::Landed(Hit);
 	StopGlide();
 
+	// Apply fall damage based on tracked fall speed
+	ApplyFallDamage(LastFallSpeed);
+	LastFallSpeed = 0.0f;
+
 	// Check if space is being held
 	APlayerController* PC = Cast<APlayerController>(GetController());
 	bool bSpaceHeld = PC && PC->IsInputKeyDown(EKeys::SpaceBar);
@@ -596,6 +634,48 @@ void AIAmSadCharacter::Landed(const FHitResult& Hit)
 	{
 		JumpBufferTimer = 0.0f;
 		Super::Jump();
+
+		// Play sound and call Blueprint hook for buffered jump
+		if (JumpSound)
+		{
+			UGameplayStatics::PlaySoundAtLocation(this, JumpSound, GetActorLocation());
+		}
+		OnJump();
+	}
+}
+
+void AIAmSadCharacter::ApplyFallDamage(float FallSpeed)
+{
+	if (!bFallDamageEnabled || FallSpeed < FallDamageThresholdSpeed)
+	{
+		return;
+	}
+
+	// Calculate damage based on how much we exceeded the threshold
+	float ExcessSpeed = FallSpeed - FallDamageThresholdSpeed;
+	float DamageAmount = ExcessSpeed * FallDamageMultiplier;
+
+	if (HealthComponent)
+	{
+		HealthComponent->TakeDamage(DamageAmount);
+
+		// Check if this killed us
+		if (HealthComponent->CurrentHealth <= 0.0f)
+		{
+			if (DeathSound)
+			{
+				UGameplayStatics::PlaySoundAtLocation(this, DeathSound, GetActorLocation());
+			}
+			OnDeathByFalling(FallSpeed);
+		}
+		else
+		{
+			if (FallDamageSound)
+			{
+				UGameplayStatics::PlaySoundAtLocation(this, FallDamageSound, GetActorLocation());
+			}
+			OnFallDamage(FallSpeed, DamageAmount);
+		}
 	}
 }
 
@@ -603,6 +683,26 @@ void AIAmSadCharacter::StartGlide()
 {
 	bIsGliding = true;
 	bIsStalling = false;
+
+	// Start looping glide sound
+	if (GlideLoopSound)
+	{
+		GlideAudioComponent = UGameplayStatics::SpawnSoundAttached(
+			GlideLoopSound,
+			RootComponent,
+			NAME_None,
+			FVector::ZeroVector,
+			EAttachLocation::KeepRelativeOffset,
+			false,
+			1.0f,
+			1.0f,
+			0.0f,
+			nullptr,
+			nullptr,
+			true  // bAutoDestroy = true
+		);
+	}
+	OnStartGlide();
 
 	// Store starting position for trail
 	LastGlidePosition = GetActorLocation();
@@ -633,6 +733,14 @@ void AIAmSadCharacter::StopGlide()
 	{
 		bIsGliding = false;
 		bIsStalling = false;
+
+		// Stop looping glide sound
+		if (GlideAudioComponent)
+		{
+			GlideAudioComponent->Stop();
+			GlideAudioComponent = nullptr;
+		}
+		OnStopGlide();
 
 		// Restore normal gravity
 		GetCharacterMovement()->GravityScale = 1.0f;
