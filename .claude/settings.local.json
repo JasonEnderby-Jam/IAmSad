@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(tree:*)",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(ls -la \"C:\\\\Users\\\\Guest2\\\\Documents\\\\Unreal Projects\\\\IAmSadder\\\\IAmSad\\\\Source\\\\IAmSad\"\" | grep -i \".h|.cpp \")",
+      "Bash(dir:*)"
     ]
   }
 }
