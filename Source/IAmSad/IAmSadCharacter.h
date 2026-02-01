@@ -217,9 +217,14 @@ protected:
 	float FallDamageMultiplier = 0.1f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Fall Damage")
-	bool bFallDamageEnabled = true;
+	bool bFallDamageEnabled = false;
+
+	/** Z height below which the character dies (kill plane) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Fall Damage")
+	float KillPlaneZ = -2000.0f;
 
 	float LastFallSpeed = 0.0f;
+	bool bIsDead = false;
 
 	void ApplyFallDamage(float FallSpeed);
 
@@ -248,6 +253,10 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sounds")
 	USoundBase* DeathSound;
+
+	/** Sound played when taking any damage */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sounds")
+	USoundBase* DamageSound;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sounds")
 	USoundBase* FallDamageSound;
@@ -287,5 +296,18 @@ protected:
 	/** Called when gravity is reversed. bReversed is true if gravity is now reversed (upside down). */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Character|Hooks")
 	void OnReverseGravity(bool bReversed);
+
+	/** Called when the character takes any damage */
+	UFUNCTION(BlueprintImplementableEvent, Category = "Character|Hooks")
+	void OnTakeDamage(float DamageAmount, float RemainingHealth);
+
+	/** Called when the character dies (from any cause) */
+	UFUNCTION(BlueprintImplementableEvent, Category = "Character|Hooks")
+	void OnDeath();
+
+protected:
+	/** Called when health reaches zero */
+	UFUNCTION()
+	void HandleDeath();
 };
 
