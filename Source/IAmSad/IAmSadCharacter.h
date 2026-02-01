@@ -14,6 +14,8 @@ class UInputAction;
 class UHealthComponent;
 class UPaperFlipbookComponent;
 class UPaperFlipbook;
+class USoundBase;
+class UAudioComponent;
 struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
@@ -207,6 +209,25 @@ protected:
 
 	void ReverseGravity();
 
+	/** Fall damage settings */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Fall Damage")
+	float FallDamageThresholdSpeed = 1500.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Fall Damage")
+	float FallDamageMultiplier = 0.1f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Fall Damage")
+	bool bFallDamageEnabled = false;
+
+	/** Z height below which the character dies (kill plane) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Fall Damage")
+	float KillPlaneZ = -2000.0f;
+
+	float LastFallSpeed = 0.0f;
+	bool bIsDead = false;
+
+	void ApplyFallDamage(float FallSpeed);
+
 	virtual void NotifyControllerChanged() override;
 
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
@@ -218,5 +239,75 @@ public:
 	FORCEINLINE class UCameraComponent* GetFollowCamera() const { return FollowCamera; }
 	/** Returns HealthComponent subobject **/
 	FORCEINLINE class UHealthComponent* GetHealthComponent() const { return HealthComponent; }
+
+	// ============================================
+	// Sounds - Assign in Blueprint/Editor
+	// ============================================
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sounds")
+	USoundBase* JumpSound;
+
+	/** Looping sound that plays while gliding */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sounds")
+	USoundBase* GlideLoopSound;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sounds")
+	USoundBase* DeathSound;
+
+	/** Sound played when taking any damage */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sounds")
+	USoundBase* DamageSound;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sounds")
+	USoundBase* FallDamageSound;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sounds")
+	USoundBase* ReverseGravitySound;
+
+protected:
+	/** Audio component for glide loop sound */
+	UPROPERTY()
+	UAudioComponent* GlideAudioComponent;
+
+	// ============================================
+	// Blueprint Hooks - Override these in Blueprint
+	// ============================================
+
+	/** Called when the character jumps */
+	UFUNCTION(BlueprintImplementableEvent, Category = "Character|Hooks")
+	void OnJump();
+
+	/** Called when the character starts gliding */
+	UFUNCTION(BlueprintImplementableEvent, Category = "Character|Hooks")
+	void OnStartGlide();
+
+	/** Called when the character stops gliding */
+	UFUNCTION(BlueprintImplementableEvent, Category = "Character|Hooks")
+	void OnStopGlide();
+
+	/** Called when the character dies from falling. FallSpeed is the impact velocity. */
+	UFUNCTION(BlueprintImplementableEvent, Category = "Character|Hooks")
+	void OnDeathByFalling(float FallSpeed);
+
+	/** Called when the character takes fall damage (but survives). */
+	UFUNCTION(BlueprintImplementableEvent, Category = "Character|Hooks")
+	void OnFallDamage(float FallSpeed, float DamageAmount);
+
+	/** Called when gravity is reversed. bReversed is true if gravity is now reversed (upside down). */
+	UFUNCTION(BlueprintImplementableEvent, Category = "Character|Hooks")
+	void OnReverseGravity(bool bReversed);
+
+	/** Called when the character takes any damage */
+	UFUNCTION(BlueprintImplementableEvent, Category = "Character|Hooks")
+	void OnTakeDamage(float DamageAmount, float RemainingHealth);
+
+	/** Called when the character dies (from any cause) */
+	UFUNCTION(BlueprintImplementableEvent, Category = "Character|Hooks")
+	void OnDeath();
+
+protected:
+	/** Called when health reaches zero */
+	UFUNCTION()
+	void HandleDeath();
 };
 
