@@ -188,6 +188,8 @@ protected:
 
 	virtual void Landed(const FHitResult& Hit) override;
 
+	virtual void FellOutOfWorld(const UDamageType& DmgType) override;
+
 	virtual void Jump() override;
 	virtual void StopJumping() override;
 
@@ -221,7 +223,7 @@ protected:
 
 	/** Z height below which the character dies (kill plane) */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Fall Damage")
-	float KillPlaneZ = -2000.0f;
+	float KillPlaneZ = -50000.0f;
 
 	float LastFallSpeed = 0.0f;
 	bool bIsDead = false;

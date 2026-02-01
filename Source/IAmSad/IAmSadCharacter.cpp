@@ -18,6 +18,7 @@
 #include "Sound/SoundBase.h"
 #include "Components/AudioComponent.h"
 #include "Kismet/GameplayStatics.h"
+#include "GameFramework/DamageType.h"
 
 DEFINE_LOG_CATEGORY(LogTemplateCharacter);
 
@@ -202,17 +203,19 @@ void AIAmSadCharacter::DebugTakeDamage()
 {
 	if (HealthComponent)
 	{
+		// Play damage sound first
+		if (DamageSound)
+		{
+			UGameplayStatics::PlaySoundAtLocation(this, DamageSound, GetActorLocation());
+		}
+
 		float DamageAmount = 10.0f;
 		HealthComponent->TakeDamage(DamageAmount);
 		UE_LOG(LogTemplateCharacter, Log, TEXT("Debug damage: Health is now %.1f"), HealthComponent->CurrentHealth);
 
-		// Play damage sound and call hook (death is handled by HandleDeath via delegate)
+		// Call hook if still alive (death is handled by HandleDeath via delegate)
 		if (HealthComponent->CurrentHealth > 0.0f)
 		{
-			if (DamageSound)
-			{
-				UGameplayStatics::PlaySoundAtLocation(this, DamageSound, GetActorLocation());
-			}
 			OnTakeDamage(DamageAmount, HealthComponent->CurrentHealth);
 		}
 	}
@@ -306,17 +309,30 @@ void AIAmSadCharacter::Tick(float DeltaTime)
 	Super::Tick(DeltaTime);
 
 	// Check kill plane (fell off map)
-	if (!bIsDead && GetActorLocation().Z < KillPlaneZ)
+	float CurrentZ = GetActorLocation().Z;
+	if (!bIsDead && CurrentZ < KillPlaneZ)
 	{
+		// Stop gliding so we fall faster to death
+		if (bIsGliding)
+		{
+			StopGlide();
+		}
 		HandleDeath();
 		return;
+	}
+
+	// Stop gliding if falling into void (below kill plane + buffer)
+	if (bIsGliding && CurrentZ < KillPlaneZ + 500.0f)
+	{
+		StopGlide();
 	}
 
 	// Update flipbook based on current state
 	UpdateFlipbook();
 
 	// Keep sprite facing the camera and flip based on direction
-	if (CharacterSprite)
+	// Skip during gravity transition animation to avoid overwriting it
+	if (CharacterSprite && !bPlayingGravityTransition)
 	{
 		if (bIsGliding)
 		{
@@ -640,13 +656,20 @@ void AIAmSadCharacter::StopJumping()
 	}
 }
 
+void AIAmSadCharacter::FellOutOfWorld(const UDamageType& DmgType)
+{
+	// Don't call Super - it would destroy the actor
+	// Instead, handle death properly with level restart
+	HandleDeath();
+}
+
 void AIAmSadCharacter::Landed(const FHitResult& Hit)
 {
 	Super::Landed(Hit);
 	StopGlide();
 
-	// Apply fall damage based on tracked fall speed
-	ApplyFallDamage(LastFallSpeed);
+	// Fall damage disabled - only H key deals damage
+	// ApplyFallDamage(LastFallSpeed);
 	LastFallSpeed = 0.0f;
 
 	// Check if space is being held
@@ -878,6 +901,8 @@ void AIAmSadCharacter::UpdateFlipbook()
 	if (DesiredFlipbook && CharacterSprite->GetFlipbook() != DesiredFlipbook)
 	{
 		CharacterSprite->SetFlipbook(DesiredFlipbook);
+		CharacterSprite->SetLooping(true);
 		CharacterSprite->SetPlayRate(1.0f);
+		CharacterSprite->Play();
 	}
 }
