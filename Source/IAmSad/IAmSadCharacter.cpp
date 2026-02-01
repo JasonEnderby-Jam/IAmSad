@@ -19,6 +19,7 @@
 #include "Components/AudioComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "GameFramework/DamageType.h"
+#include "Blueprint/UserWidget.h"
 
 DEFINE_LOG_CATEGORY(LogTemplateCharacter);
 
@@ -385,8 +386,8 @@ void AIAmSadCharacter::Tick(float DeltaTime)
 	{
 		FallTimer += DeltaTime;
 
-		// Auto-start glide after falling long enough
-		if (!bIsGliding && FallTimer >= MinFallTimeForGlide)
+		// Auto-start glide after falling long enough (only if we haven't glided yet this jump)
+		if (!bIsGliding && bCanGlide && FallTimer >= MinFallTimeForGlide)
 		{
 			StartGlide();
 		}
@@ -667,6 +668,7 @@ void AIAmSadCharacter::Landed(const FHitResult& Hit)
 {
 	Super::Landed(Hit);
 	StopGlide();
+	bCanGlide = true;  // Reset glide ability on landing
 
 	// Fall damage disabled - only H key deals damage
 	// ApplyFallDamage(LastFallSpeed);
@@ -778,6 +780,7 @@ void AIAmSadCharacter::StopGlide()
 	{
 		bIsGliding = false;
 		bIsStalling = false;
+		bCanGlide = false;  // Must land before gliding again
 
 		// Stop looping glide sound
 		if (GlideAudioComponent)
@@ -845,18 +848,31 @@ void AIAmSadCharacter::HandleDeath()
 	// Call Blueprint hook
 	OnDeath();
 
+	// Show death widget
+	if (DeathWidgetClass)
+	{
+		if (APlayerController* PC = Cast<APlayerController>(GetController()))
+		{
+			UUserWidget* DeathWidget = CreateWidget<UUserWidget>(PC, DeathWidgetClass);
+			if (DeathWidget)
+			{
+				DeathWidget->AddToViewport();
+			}
+		}
+	}
+
 	// Disable input
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
 	{
 		DisableInput(PC);
 	}
 
-	// Restart the current level after a short delay
+	// Restart the current level after 3 seconds (matches widget display time)
 	FTimerHandle RestartTimerHandle;
 	GetWorldTimerManager().SetTimer(RestartTimerHandle, [this]()
 	{
 		UGameplayStatics::OpenLevel(this, FName(*GetWorld()->GetName()));
-	}, 2.0f, false);
+	}, 3.0f, false);
 }
 
 void AIAmSadCharacter::UpdateFlipbook()

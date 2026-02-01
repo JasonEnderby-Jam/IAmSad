@@ -16,6 +16,7 @@ class UPaperFlipbookComponent;
 class UPaperFlipbook;
 class USoundBase;
 class UAudioComponent;
+class UUserWidget;
 struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
@@ -159,6 +160,7 @@ protected:
 
 	bool bIsGliding = false;
 	bool bIsStalling = false;
+	bool bCanGlide = true;
 	float StallReflectionTarget = 0.0f;
 	float StallRecoveryTimer = 0.0f;
 
@@ -265,6 +267,10 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sounds")
 	USoundBase* ReverseGravitySound;
+
+	/** Widget to display on death */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI")
+	TSubclassOf<UUserWidget> DeathWidgetClass;
 
 protected:
 	/** Audio component for glide loop sound */
